@@ -1,64 +1,53 @@
 import { NextResponse } from 'next/server';
+import { workshopConfig } from '../../../config/workshopConfig';
+import { isSameOrigin } from '../../../lib/security';
 
 export const runtime = 'edge';
 
+// The price is decided here on the server, never by the browser.
+// Anything the browser sends (amount, currency) is ignored.
+const PRICE_PAISE = Math.round(workshopConfig.price.amount * 100);
+const CURRENCY = 'INR';
+
 export async function POST(request: Request) {
   try {
+    if (!isSameOrigin(request)) {
+      return NextResponse.json({ error: 'Forbidden.' }, { status: 403 });
+    }
+
     const keyId = process.env.RAZORPAY_KEY_ID?.trim();
     const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
 
     if (!keyId || !keySecret) {
       return NextResponse.json(
-        { error: 'Razorpay credentials are not configured on the server.' },
-        { status: 401 }
+        { error: 'Payments are temporarily unavailable. Please try again later.' },
+        { status: 503 }
       );
     }
 
-    const body = await request.json().catch(() => ({}));
-    const amount = Number(body.amount);
-    const currency =
-      typeof body.currency === 'string' && body.currency.trim()
-        ? body.currency.trim()
-        : 'INR';
-    const receipt =
-      typeof body.receipt === 'string' && body.receipt.trim()
-        ? body.receipt.trim()
-        : `receipt_${Date.now()}`;
+    const receipt = `ws_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 
-    if (!Number.isFinite(amount) || amount < 100) {
-      return NextResponse.json(
-        { error: 'Amount must be at least 100 paise (₹1).' },
-        { status: 400 }
-      );
-    }
-
-    const authHeader = `Basic ${btoa(`${keyId}:${keySecret}`)}`;
     const res = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
-        Authorization: authHeader,
+        Authorization: `Basic ${btoa(`${keyId}:${keySecret}`)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        amount: Math.round(amount),
-        currency,
+        amount: PRICE_PAISE,
+        currency: CURRENCY,
         receipt,
+        notes: { product: workshopConfig.title },
       }),
     });
 
     const data = await res.json().catch(() => ({}));
 
-    if (res.status === 401) {
-      return NextResponse.json(
-        { error: 'Razorpay authentication failed.' },
-        { status: 401 }
-      );
-    }
-
     if (!res.ok || !data?.id) {
+      console.error('Razorpay order creation failed', res.status, data?.error?.code);
       return NextResponse.json(
-        { error: data?.error?.description || 'Failed to create Razorpay order.' },
-        { status: 500 }
+        { error: 'Could not start payment. Please try again.' },
+        { status: 502 }
       );
     }
 
@@ -68,10 +57,9 @@ export async function POST(request: Request) {
       amount: data.amount,
       currency: data.currency,
     });
-  } catch (err: unknown) {
-    const error = err as { message?: string };
+  } catch {
     return NextResponse.json(
-      { error: error?.message || 'Failed to create Razorpay order.' },
+      { error: 'Could not start payment. Please try again.' },
       { status: 500 }
     );
   }

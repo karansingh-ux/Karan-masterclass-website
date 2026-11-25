@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { workshopConfig } from '../../../config/workshopConfig';
+import { isSameOrigin } from '../../../lib/security';
 
 export const runtime = 'edge';
 
@@ -28,6 +30,10 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 
 export async function POST(request: Request) {
   try {
+    if (!isSameOrigin(request)) {
+      return NextResponse.json({ verified: false, error: 'Forbidden.' }, { status: 403 });
+    }
+
     const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
     if (!keySecret) {
       return NextResponse.json(
@@ -60,6 +66,29 @@ export async function POST(request: Request) {
         { verified: false, error: 'Invalid payment signature.' },
         { status: 400 }
       );
+    }
+
+    // Signature is valid. Also confirm with Razorpay that this order was for
+    // the full workshop price and is actually paid.
+    const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+    if (keyId) {
+      const orderRes = await fetch(
+        `https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpay_order_id)}`,
+        { headers: { Authorization: `Basic ${btoa(`${keyId}:${keySecret}`)}` } }
+      );
+      const order = await orderRes.json().catch(() => ({}));
+      const expected = Math.round(workshopConfig.price.amount * 100);
+      if (
+        !orderRes.ok ||
+        order?.amount !== expected ||
+        order?.currency !== 'INR' ||
+        Number(order?.amount_paid) < expected
+      ) {
+        return NextResponse.json(
+          { verified: false, error: 'Payment could not be confirmed. If money was deducted, please email us.' },
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json({

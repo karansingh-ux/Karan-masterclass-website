@@ -83,11 +83,7 @@ export default function RazorpayCheckoutButton({
       const orderRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: workshopConfig.price.amount * 100,
-          currency: 'INR',
-          receipt: `ws_${Date.now()}`,
-        }),
+        body: '{}',
       });
 
       const orderData = await orderRes.json();
