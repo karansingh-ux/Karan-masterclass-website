@@ -80,16 +80,6 @@ export default function RazorpayCheckoutButton({
         return;
       }
 
-      const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-      if (!keyId) {
-        setStatus({
-          type: 'error',
-          message: 'Razorpay public key is missing.',
-        });
-        setLoading(false);
-        return;
-      }
-
       const orderRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -106,6 +96,16 @@ export default function RazorpayCheckoutButton({
           type: 'error',
           message: orderData.error || 'Could not initiate payment order.',
         });
+        setLoading(false);
+        return;
+      }
+
+      // Use the key ID from the server so it always matches the secret
+      // that created the order; fall back to the build-time public key.
+      const keyId: string | undefined =
+        orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!keyId) {
+        setStatus({ type: 'error', message: 'Razorpay public key is missing.' });
         setLoading(false);
         return;
       }

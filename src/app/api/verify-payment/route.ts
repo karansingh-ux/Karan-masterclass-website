@@ -28,7 +28,7 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 
 export async function POST(request: Request) {
   try {
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
     if (!keySecret) {
       return NextResponse.json(
         { verified: false, error: 'Razorpay secret key is not configured.' },

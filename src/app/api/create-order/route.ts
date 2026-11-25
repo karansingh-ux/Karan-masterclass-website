@@ -4,8 +4,8 @@ export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+    const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
 
     if (!keyId || !keySecret) {
       return NextResponse.json(
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       order_id: data.id,
+      key_id: keyId,
       amount: data.amount,
       currency: data.currency,
     });
